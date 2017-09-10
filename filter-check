@@ -8,12 +8,22 @@ import re
 import ConfigParser
 from email.parser import HeaderParser
 from os.path import expanduser
+import argparse
 
 
-def main(argv = None):
+def main():
+    parser = argparse.ArgumentParser(prog = "filter-check", description='Check deliverability to various mail providers.')
+    parser.add_argument('--sendvia', help='the host to relay the email');
+    parser.add_argument('--sendto', help='the host to send the email');
+    parser.add_argument('--quiet', action="store_true", help='surpress all output, use exit codes only');
+    parser.add_argument('--gtube', action="store_true", help='use spamassassin code to identify the message as spam (for debugging)');
+    parser.add_argument('--headers', action="store_true", help='output full headers');
+    parser.add_argument('--sleep', type=int, help='output full headers');
+    args = parser.parse_args()
+
     check = filter_check()
-    check.init()
-    check.run()
+    check.init(args)
+    return check.run()
 
 class filter_check:
     # Main configuration parameters.
@@ -23,6 +33,8 @@ class filter_check:
     gtube = False
     headers = False
     emailfrom = ""
+    sendto = None
+    sendvia = None
 
     # Host specific parameters.
     emailto = ""
@@ -34,11 +46,19 @@ class filter_check:
     smtp_user = ""
     smtp_pass = ""
     smtp_host = ""
+    
+    # Constants representing where a message is found.
+    INBOX = 0
+    SPAMBOX = 1
+    NOTFOUND = 3
 
     # Dynamic parameters.
-    found = False
+    found = None 
 
-    def init(self):
+    def init(self, args = None):
+      self.found = self.NOTFOUND
+
+      # First parse the configuration file.
       config = ConfigParser.ConfigParser()
       home = expanduser("~")
       config.readfp(open(home + '/.filter-check.conf'))
@@ -47,26 +67,35 @@ class filter_check:
       self.quiet = config.getboolean("main", "quiet")
       self.gtube = config.getboolean("main", "gtube")
       self.emailfrom = config.get("main", "emailfrom")
+      self.sleep = config.get("main", "sleep")
 
-      sendto = config.get("main", "sendto")
-      sendvia = config.get("main", "sendvia")
+      self.sendto = config.get("main", "sendto")
+      self.sendvia = config.get("main", "sendvia")
+      
+      # Now, overwrite with passed in arguments.
+      for key, value in vars(args).iteritems():
+          setattr(self, key, value)
 
-      self.emailto = config.get(sendto, "emailto")
-      self.imap_user = config.get(sendto, "imap_user")
-      self.imap_pass = config.get(sendto, "imap_pass")
-      self.imap_host = config.get(sendto, "imap_host")
-      self.imap_spam_box = config.get(sendto, "imap_spam_box")
-      self.headers_regex = config.get(sendto, "headers_regex")
+      # Now, set the smtp and imap variables.
+      self.emailto = config.get(self.sendto, "emailto")
+      self.imap_user = config.get(self.sendto, "imap_user")
+      self.imap_pass = config.get(self.sendto, "imap_pass")
+      self.imap_host = config.get(self.sendto, "imap_host")
+      self.imap_spam_box = config.get(self.sendto, "imap_spam_box")
+      self.headers_regex = config.get(self.sendto, "headers_regex")
 
-
-      self.smtp_user = config.get(sendvia, "smtp_user")
-      self.smtp_pass = config.get(sendvia, "smtp_pass")
-      self.smtp_host = config.get(sendvia, "smtp_host")
+      self.smtp_user = config.get(self.sendvia, "smtp_user")
+      self.smtp_pass = config.get(self.sendvia, "smtp_pass")
+      self.smtp_host = config.get(self.sendvia, "smtp_host")
 
       # If debugging, send a message that spamassassin will automatically
       # process as spam.
       if self.gtube == True:
           self.msg = "XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X"
+
+    def output(self, msg):
+        if not self.quiet:
+            print("{0}".format(msg))
 
     def run(self):
       # Send the message.
@@ -75,10 +104,11 @@ class filter_check:
       server.login(self.smtp_user, self.smtp_pass)
       #server.set_debuglevel(1)
       server.sendmail(self.emailfrom, self.emailto, mail)
+      self.output("Message sent")
       server.quit()
 
       # Give the message some time to be delivered.
-      print("Sleeping for 10 seconds.")
+      self.output("Sleeping for 10 seconds.")
       time.sleep(10)
 
       # Login to check for it.
@@ -92,13 +122,14 @@ class filter_check:
 
       # Try INBOX first.
       messages = []
+      exit_code = 0
       count = M.select()
       if count > 0:
           typ, data = M.search(None, 'Subject', self.subject)
           messages = data[0]
 
       if len(messages) > 0:
-          self.found = 'Inbox'
+          self.found = self.INBOX
       else:
           # Try spam box.
           count = M.select(self.imap_spam_box)
@@ -106,12 +137,18 @@ class filter_check:
               typ, data = M.search(None, 'Subject', self.subject)
               messages = data[0]
               if len(messages) > 0:
-                  self.found = 'Spam'
+                  self.found = self.SPAMBOX
 
-      if self.found == False:
-          print "Found in: NOT FOUND"
+      if self.found == self.NOTFOUND:
+          self.output("Found in: NOT FOUND")
       else:
-          print "Found in: {0}\n".format(self.found)
+          if self.found == self.INBOX:
+            friendly_location = 'Inbox'
+          else:
+            friendly_location = 'Spambox'
+
+          self.output("Found in: {0}\n".format(friendly_location))
+
       # Iterate over each message found
       for num in messages.split():
           typ, data = M.fetch(num, '(RFC822)')
@@ -119,13 +156,14 @@ class filter_check:
           headers = parser.parsestr(data[0][1])
           for key in headers.keys():
               if self.headers == True or reg.match(key):
-                  print "{0}: {1}".format(key, headers.get(key))
+                  self.output("{0}: {1}".format(key, headers.get(key)))
 
           M.store(num, '+FLAGS', '\\Deleted')
 
       M.expunge()
       M.close()
       M.logout()
+      return self.found
 
 if __name__ == "__main__":
     sys.exit(main())
