@@ -16,23 +16,27 @@ def main(argv = None):
     check.run()
 
 class filter_check:
+    # Main configuration parameters.
     subject = "Meeting next week"
     msg = "Hi all,\nDon't forget, the next meeting is on Wendesday at 8:00 pm.\n\nSee you there,\njamie"
     quiet = False
     gtube = False
     headers = False
-    from_address = ""
-    to_address = ""
+    emailfrom = ""
+
+    # Host specific parameters.
+    emailto = ""
     imap_user = ""
     imap_pass = ""
     imap_host = ""
     imap_spam_box = ""
-    headers_regex = "" 
+    headers_regex = ""
     smtp_user = ""
     smtp_pass = ""
     smtp_host = ""
 
-    found = False 
+    # Dynamic parameters.
+    found = False
 
     def init(self):
       config = ConfigParser.ConfigParser()
@@ -42,33 +46,35 @@ class filter_check:
       self.headers = config.getboolean("main", "headers")
       self.quiet = config.getboolean("main", "quiet")
       self.gtube = config.getboolean("main", "gtube")
-      self.from_address = config.get("main", "from_address")
+      self.emailfrom = config.get("main", "emailfrom")
 
-      send_to = config.get("main", "send_to")
-      send_via = config.get("main", "send_via")
+      sendto = config.get("main", "sendto")
+      sendvia = config.get("main", "sendvia")
 
-      self.to_address = config.get(send_to, "to_address")
-      self.imap_user = config.get(send_to, "imap_user") 
-      self.imap_pass = config.get(send_to, "imap_pass") 
-      self.imap_host = config.get(send_to, "imap_host") 
-      self.imap_spam_box = config.get(send_to, "imap_spam_box") 
-      self.headers_regex = config.get(send_to, "headers_regex") 
+      self.emailto = config.get(sendto, "emailto")
+      self.imap_user = config.get(sendto, "imap_user")
+      self.imap_pass = config.get(sendto, "imap_pass")
+      self.imap_host = config.get(sendto, "imap_host")
+      self.imap_spam_box = config.get(sendto, "imap_spam_box")
+      self.headers_regex = config.get(sendto, "headers_regex")
 
 
-      self.smtp_user = config.get(send_via, "smtp_user")
-      self.smtp_pass = config.get(send_via, "smtp_pass")
-      self.smtp_host = config.get(send_via, "smtp_host")
+      self.smtp_user = config.get(sendvia, "smtp_user")
+      self.smtp_pass = config.get(sendvia, "smtp_pass")
+      self.smtp_host = config.get(sendvia, "smtp_host")
 
+      # If debugging, send a message that spamassassin will automatically
+      # process as spam.
       if self.gtube == True:
           self.msg = "XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X"
 
     def run(self):
       # Send the message.
-      mail = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\n\r\n{3}".format(self.subject, self.from_address, self.to_address, self.msg)
+      mail = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\n\r\n{3}".format(self.subject, self.emailfrom, self.emailto, self.msg)
       server = smtplib.SMTP_SSL(self.smtp_host)
       server.login(self.smtp_user, self.smtp_pass)
       #server.set_debuglevel(1)
-      server.sendmail(self.from_address, self.to_address, mail)
+      server.sendmail(self.emailfrom, self.emailto, mail)
       server.quit()
 
       # Give the message some time to be delivered.
@@ -81,7 +87,7 @@ class filter_check:
       # Uncomment to trouble shoot where the spam box is.
       #print M.namespace()
       #print M.list()
-      
+ 
       reg = re.compile(self.headers_regex)
 
       # Try INBOX first.
