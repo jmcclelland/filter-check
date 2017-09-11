@@ -23,7 +23,9 @@ def main():
     args = parser.parse_args()
 
     check = filter_check()
-    check.init(args)
+    ret = check.init(args)
+    if ret is not True:
+        return ret
     return check.run()
 
 class filter_check:
@@ -35,6 +37,9 @@ class filter_check:
 
     # Variable holding where the message was found. 
     found = None 
+
+    # Global config object
+    config = None
 
     # Default values go here.
     settings = {
@@ -52,7 +57,7 @@ class filter_check:
             'imap_pass': None,
             'imap_host': None,
             'imap_spam_box': None,
-            'headers_regex': None,
+            'headers_regex': 'Subject',
             'smtp_user': None,
             'smtp_pass': None,
             'smtp_host': None
@@ -62,46 +67,63 @@ class filter_check:
       self.found = self.NOTFOUND
 
       # First parse the configuration file.
-      config = ConfigParser.ConfigParser(self.settings)
+      self.config = ConfigParser.SafeConfigParser()
       home = expanduser("~")
-      config.readfp(open(home + '/.filter-check.conf'))
+      self.config.readfp(open(home + '/.filter-check.conf'))
 
-      self.settings['headers'] = config.getboolean("main", "headers")
-      self.settings['quiet'] = config.getboolean("main", "quiet")
-      self.settings['gtube'] = config.getboolean("main", "gtube")
-      self.settings['emailfrom'] = config.get("main", "emailfrom")
-      self.settings['sleep'] = config.getfloat("main", "sleep")
+      self.set_optional_setting('main', 'headers', vartype = 'boolean');
+      self.set_optional_setting('main', 'quiet', vartype = 'boolean');
+      self.set_optional_setting('main', 'gtube', vartype = 'boolean');
+      self.set_optional_setting('main', 'emailfrom');
+      self.set_optional_setting('main', 'sleep', vartype = 'float');
+      self.set_optional_setting('main', 'sendto');
+      self.set_optional_setting('main', 'sendvia');
 
-      self.settings['sendto'] = config.get("main", "sendto")
-      self.settings['sendvia'] = config.get("main", "sendvia")
-      
       # Now, overwrite with passed in arguments.
       for key, value in vars(args).iteritems():
           if value is not None:
             setattr(self, key, value)
 
-      # Now, set the smtp and imap variables.
+      # Now, set the smtp and imap variables that are required.
       try:
-          self.settings['emailto'] = config.get(self.sendto, "emailto")
-          self.settings['imap_user'] = config.get(self.sendto, "imap_user")
-          self.settings['imap_pass'] = config.get(self.sendto, "imap_pass")
-          self.settings['imap_host'] = config.get(self.sendto, "imap_host")
-          self.settings['imap_spam_box'] = config.get(self.sendto, "imap_spam_box")
-          self.settings['headers_regex'] = config.get(self.sendto, "headers_regex")
+          self.settings['emailto'] = self.config.get(self.settings['sendto'], "emailto")
+          self.settings['imap_user'] = self.config.get(self.settings['sendto'], "imap_user")
+          self.settings['imap_pass'] = self.config.get(self.settings['sendto'], "imap_pass")
+          self.settings['imap_host'] = self.config.get(self.settings['sendto'], "imap_host")
+          self.settings['smtp_host'] = self.config.get(self.settings['sendvia'], "smtp_host")
 
-          self.settings['smtp_user'] = config.get(self.sendvia, "smtp_user")
-          self.settings['smtp_pass'] = config.get(self.sendvia, "smtp_pass")
-          self.settings['smtp_host'] = config.get(self.sendvia, "smtp_host")
-
-      except ConfigParser.NoOptionError, e:
+      except ConfigParser.NoOptionError:
           # Throw a friendlier error 
-          self.output("Error, could not find your sendvia or sendto block in the config file.")
+          self.output("Error, missing a required value in your sendto or sendvia section.")
+          return self.ERROR
+      except ConfigParser.NoSectionError:
+          self.output("Please ensure both --sendto and --sendvia are set in config file.")
           return self.ERROR
 
+      # Set more optional settings.
+      self.set_optional_setting(self.settings['sendto'], "imap_spam_box")
+      self.set_optional_setting(self.settings['sendto'], "headers_regex")
+      self.set_optional_setting(self.settings['sendvia'], "smtp_user")
+      self.set_optional_setting(self.settings['sendvia'], "smtp_pass")
+
       # If debugging, send a message that spamassassin will automatically
-      # process as spam.
+      # process as spam
       if self.settings['gtube'] == True:
           self.msg = "XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X"
+
+      return True
+
+    def set_optional_setting(self, section, key, vartype = 'string'):
+        try:
+            if vartype == "boolean":
+              self.settings[key] = self.config.getboolean(section, key)
+            elif vartype == "float":
+              self.settings[key] = self.config.getfloat(section, key)
+            else:
+              self.settings[key] = self.config.get(section, key)
+
+        except ConfigParser.NoOptionError:
+          pass
 
     def output(self, msg):
         if not self.settings['quiet']:
