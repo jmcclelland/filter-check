@@ -44,6 +44,15 @@ def main():
     type=float,
     default=None, help='number of seconds to wait between sending and checking email'
   );
+  parser.add_argument('--emailfrom',
+    default=None, help='send the test message from this email'
+  );
+  parser.add_argument('--subject',
+    default=None, help='specify the subject for the test message'
+  );
+  parser.add_argument('--msg',
+    default=None, help='specify the body of the test message'
+  );
   args = parser.parse_args()
 
   check = filter_check()
@@ -183,7 +192,12 @@ class filter_check:
     if self.settings['smtp_user'] and self.settings['smtp_pass']:
       server.login(self.settings['smtp_user'], self.settings['smtp_pass'])
     #server.set_debuglevel(1)
-    server.sendmail(self.settings['emailfrom'], self.settings['emailto'], mail)
+    try:
+      server.sendmail(self.settings['emailfrom'], self.settings['emailto'], mail)
+    except:
+      self.output("Message delivery was refused.")
+      return self.ERROR
+
     self.output("Message sent")
     server.quit()
 
@@ -213,7 +227,7 @@ class filter_check:
       # Try spam box.
       count = M.select(self.settings['imap_spam_box'])
       if count > 0:
-        typ, data = M.search(None, 'X-filter-check', x_filter_check)
+        typ, data = M.search(None, '(HEADER X-filter-check "' + x_filter_check + '")')
         messages = data[0]
         if len(messages) > 0:
           self.found = self.SPAMBOX
