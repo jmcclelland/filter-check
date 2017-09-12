@@ -99,6 +99,12 @@ class filter_check:
     'smtp_host': None
   }
 
+  # The imap object
+  imap = None
+
+  # The header value that will be used to find this message
+  x_filter_check = None
+
   def init(self, args = None):
     self.found = self.NOTFOUND
 
@@ -173,7 +179,7 @@ class filter_check:
     # Generate a random string and add it to the messave via an invented
     # header so we can find the message via IMAP below.
     rand = random.getrandbits(128)
-    x_filter_check = "%32x" % rand
+    self.x_filter_check = "%32x" % rand
 
     # Build the message.
     msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nX-filter-check: {3}\r\n{4}"
@@ -181,7 +187,7 @@ class filter_check:
       self.settings['subject'], 
       self.settings['emailfrom'], 
       self.settings['emailto'], 
-      x_filter_check,
+      self.x_filter_check,
       self.settings['msg']
     )
 
@@ -206,31 +212,56 @@ class filter_check:
     time.sleep(self.settings['sleep'])
 
     # Login to check for it.
-    M = imaplib.IMAP4_SSL(self.settings['imap_host'])
-    M.login(self.settings['imap_user'], self.settings['imap_pass'])
-    # Uncomment to trouble shoot where the spam box is.
-    #print M.namespace()
-    #print M.list()
- 
-    reg = re.compile(self.settings['headers_regex'])
+    self.imap = imaplib.IMAP4_SSL(self.settings['imap_host'])
+    try:
+      self.imap.login(self.settings['imap_user'], self.settings['imap_pass'])
+    except Exception as e:
+      self.output("Failed to login to IMAP server. Wrong user/pass?")
+      return self.ERROR
 
+    # Uncomment to trouble shoot where the spam box is.
+    #print self.imap.namespace()
+    #print self.imap.list()
+ 
+    messages = self.retrieve_messages()
+
+    reg = re.compile(self.settings['headers_regex'])
+    # Iterate over each message found (should only be one)
+    for num in messages.split():
+      try:
+        typ, data = self.imap.fetch(num, '(RFC822)')
+      except Exception as e:
+        self.output("Failed to fetch the message.")
+        self.output(e)
+        self.output(messages)
+        return self.ERROR
+      parser = HeaderParser()
+      headers = parser.parsestr(data[0][1])
+      for key in headers.keys():
+        if self.settings['headers'] == True or reg.match(key):
+          self.output("{0}: {1}".format(key, headers.get(key)))
+      self.imap.store(num, '+FLAGS', '\\Deleted')
+
+    self.imap.expunge()
+    self.imap.close()
+    self.imap.logout()
+    return self.found
+
+  """
+  Given a imap object and a header, get the matching
+  message.
+  """
+  def retrieve_messages(self):
     # Try INBOX first.
-    messages = []
-    count = M.select()
-    if count > 0:
-      typ, data = M.search(None, '(HEADER X-filter-check "' + x_filter_check + '")')
-      messages = data[0]
+    messages = self.search_mailbox() 
 
     if len(messages) > 0:
       self.found = self.INBOX
     else:
       # Try spam box.
-      count = M.select(self.settings['imap_spam_box'])
-      if count > 0:
-        typ, data = M.search(None, '(HEADER X-filter-check "' + x_filter_check + '")')
-        messages = data[0]
-        if len(messages) > 0:
-          self.found = self.SPAMBOX
+      messages = self.search_mailbox(self.settings['imap_spam_box']) 
+      if len(messages) > 0:
+        self.found = self.SPAMBOX
 
     if self.found == self.NOTFOUND:
       self.output("Found in: NOT FOUND")
@@ -242,20 +273,21 @@ class filter_check:
 
       self.output("Found in: {0}\n".format(friendly_location))
 
-    # Iterate over each message found (should only be one)
-    for num in messages.split():
-      typ, data = M.fetch(num, '(RFC822)')
-      parser = HeaderParser()
-      headers = parser.parsestr(data[0][1])
-      for key in headers.keys():
-        if self.settings['headers'] == True or reg.match(key):
-          self.output("{0}: {1}".format(key, headers.get(key)))
-      M.store(num, '+FLAGS', '\\Deleted')
+    return messages
 
-    M.expunge()
-    M.close()
-    M.logout()
-    return self.found
+  def search_mailbox(self, mailbox = 'Inbox'):
+    messages = []
+    if mailbox == 'Inbox':
+      count = self.imap.select()
+    else:
+      count = self.imap.select(mailbox)
+
+    if count > 0:
+      typ, data = self.imap.search(None, '(HEADER X-filter-check "' + self.x_filter_check + '")')
+      #typ, data = self.imap.search(None, 'ALL')
+      messages = data[0]
+
+    return messages
 
 if __name__ == "__main__":
   sys.exit(main())
