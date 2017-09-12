@@ -9,7 +9,7 @@ import ConfigParser
 from email.parser import HeaderParser
 from os.path import expanduser
 import argparse
-
+import random
 
 def main():
   # Prepare the command line argument parser.
@@ -38,7 +38,7 @@ def main():
   );
   parser.add_argument('--headers',
     default=None, action="store_true",
-    help='output full headers'
+    help='output full headers, instead of brief headers'
   );
   parser.add_argument('--sleep',
     type=float,
@@ -48,8 +48,11 @@ def main():
 
   check = filter_check()
   ret = check.init(args)
+
+  # If there is an error parsing the options, bail.
   if ret is not True:
     return ret
+
   return check.run()
 
 class filter_check:
@@ -95,6 +98,9 @@ class filter_check:
     home = expanduser("~")
     self.config.readfp(open(home + '/.filter-check.conf'))
 
+    # These settings may or may not be present in the configuration file.
+    # If absent, we use the defaults. Either way, they can be overwritten
+    # by the command line arguments below.
     self.set_optional_setting('main', 'headers', vartype = 'boolean');
     self.set_optional_setting('main', 'quiet', vartype = 'boolean');
     self.set_optional_setting('main', 'gtube', vartype = 'boolean');
@@ -103,29 +109,30 @@ class filter_check:
     self.set_optional_setting('main', 'sendto');
     self.set_optional_setting('main', 'sendvia');
 
-    # Now, overwrite with passed in arguments.
+    # Now, overwrite with command line arguments.
     for key, value in vars(args).iteritems():
       if value is not None:
-      setattr(self, key, value)
+        setattr(self, key, value)
 
-    # Now, set the smtp and imap variables that are required.
+    # Now, set the smtp and imap variables. These are required so bail
+    # if any of them are not set.
     try:
       self.settings['emailto'] = self.config.get(self.settings['sendto'], "emailto")
       self.settings['imap_user'] = self.config.get(self.settings['sendto'], "imap_user")
       self.settings['imap_pass'] = self.config.get(self.settings['sendto'], "imap_pass")
       self.settings['imap_host'] = self.config.get(self.settings['sendto'], "imap_host")
+      self.settings["imap_spam_box"] = self.config.get(self.settings['sendto'], "imap_spam_box")
       self.settings['smtp_host'] = self.config.get(self.settings['sendvia'], "smtp_host")
 
     except ConfigParser.NoOptionError:
-      # Throw a friendlier error 
+      # Throw a friendlier error.
       self.output("Error, missing a required value in your sendto or sendvia section.")
       return self.ERROR
     except ConfigParser.NoSectionError:
-      self.output("Please ensure both --sendto and --sendvia are set in config file.")
+      self.output("Please ensure both --sendto and --sendvia values are set as sections in your config file.")
       return self.ERROR
 
     # Set more optional settings.
-    self.set_optional_setting(self.settings['sendto'], "imap_spam_box")
     self.set_optional_setting(self.settings['sendto'], "headers_regex")
     self.set_optional_setting(self.settings['sendvia'], "smtp_user")
     self.set_optional_setting(self.settings['sendvia'], "smtp_pass")
@@ -154,18 +161,27 @@ class filter_check:
       print("{0}".format(msg))
 
   def run(self):
-    # Send the message.
-    msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\n\r\n{3}"
+    # Generate a random string and add it to the messave via an invented
+    # header so we can find the message via IMAP below.
+    rand = random.getrandbits(128)
+    x_filter_check = "%32x" % rand
+
+    # Build the message.
+    msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nX-filter-check: {3}\r\n{4}"
     mail = msg.format(
       self.settings['subject'], 
       self.settings['emailfrom'], 
       self.settings['emailto'], 
+      x_filter_check,
       self.settings['msg']
     )
+
+    # Send it.
     server = smtplib.SMTP_SSL(self.settings['smtp_host'])
+    # Only authenticate if we have a user/pass (we don't need one to send
+    # via localhost).
     if self.settings['smtp_user'] and self.settings['smtp_pass']:
       server.login(self.settings['smtp_user'], self.settings['smtp_pass'])
-
     #server.set_debuglevel(1)
     server.sendmail(self.settings['emailfrom'], self.settings['emailto'], mail)
     self.output("Message sent")
@@ -186,10 +202,9 @@ class filter_check:
 
     # Try INBOX first.
     messages = []
-    exit_code = 0
     count = M.select()
     if count > 0:
-      typ, data = M.search(None, 'Subject', self.settings['subject'])
+      typ, data = M.search(None, '(HEADER X-filter-check "' + x_filter_check + '")')
       messages = data[0]
 
     if len(messages) > 0:
@@ -198,7 +213,7 @@ class filter_check:
       # Try spam box.
       count = M.select(self.settings['imap_spam_box'])
       if count > 0:
-        typ, data = M.search(None, 'Subject', self.settings['subject'])
+        typ, data = M.search(None, 'X-filter-check', x_filter_check)
         messages = data[0]
         if len(messages) > 0:
           self.found = self.SPAMBOX
@@ -213,7 +228,7 @@ class filter_check:
 
       self.output("Found in: {0}\n".format(friendly_location))
 
-    # Iterate over each message found
+    # Iterate over each message found (should only be one)
     for num in messages.split():
       typ, data = M.fetch(num, '(RFC822)')
       parser = HeaderParser()
@@ -221,7 +236,6 @@ class filter_check:
       for key in headers.keys():
         if self.settings['headers'] == True or reg.match(key):
           self.output("{0}: {1}".format(key, headers.get(key)))
-
       M.store(num, '+FLAGS', '\\Deleted')
 
     M.expunge()
