@@ -276,16 +276,27 @@ class filter_check:
     return messages
 
   def search_mailbox(self, mailbox = 'Inbox'):
-    messages = []
+    messages = "" 
     if mailbox == 'Inbox':
       count = self.imap.select()
     else:
       count = self.imap.select(mailbox)
 
     if count > 0:
-      typ, data = self.imap.search(None, '(HEADER X-filter-check "' + self.x_filter_check + '")')
-      #typ, data = self.imap.search(None, 'ALL')
-      messages = data[0]
+      if self.settings["imap_host"] == "imap.mail.yahoo.com":
+        # Yahoo IMAP doesn't support searching. bleh. We have to fetch each
+        # message and look for our special header.
+        typ, data = self.imap.search(None, 'ALL')
+        for num in data[0].split():
+          typ, data = self.imap.fetch(num, '(RFC822)')
+          parser = HeaderParser()
+          headers = parser.parsestr(data[0][1])
+          for key in headers.keys():
+            if key == "X-filter-check" and headers[key] == self.x_filter_check:
+              messages = num
+      else:
+        typ, data = self.imap.search(None, '(HEADER X-filter-check "' + self.x_filter_check + '")')
+        messages = data[0]
 
     return messages
 

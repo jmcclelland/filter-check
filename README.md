@@ -37,4 +37,4 @@ All settings in the [main] section of the configuration file can be overridden o
 
 For gmail to work, you have to configure your account to allow logins from "less secure apps" (see https://support.google.com/accounts/answer/6010255?hl=en). I have no idea what that means, but you can't login to gmail via this program with that setting enabled.
 
-Yahoo still not woring (due to search error - see https://stackoverflow.com/questions/29012718/imap-search-not-working-with-yahoo. However... Yahoo also requires you t, enable insecure apps via  https://login.yahoo.com/account/security#other-apps
+Yahoo requires you to enable insecure apps via  https://login.yahoo.com/account/security#other-apps.
