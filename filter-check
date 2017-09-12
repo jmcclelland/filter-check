@@ -112,7 +112,7 @@ class filter_check:
     # Now, overwrite with command line arguments.
     for key, value in vars(args).iteritems():
       if value is not None:
-        setattr(self, key, value)
+        self.settings[key] = value
 
     # Now, set the smtp and imap variables. These are required so bail
     # if any of them are not set.
