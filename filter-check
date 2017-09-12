@@ -193,7 +193,10 @@ class filter_check:
 
     # Send it.
     try:
-      server = smtplib.SMTP_SSL(self.settings['smtp_host'])
+      if self.settings['smtp_user'] and self.settings['smtp_pass']:
+        smtp = smtplib.SMTP_SSL(self.settings['smtp_host'])
+      else:
+        smtp = smtplib.SMTP(self.settings['smtp_host'])
     except Exception as e:
       self.output("Could not connect to the smtp host.")
       self.output(e)
@@ -202,17 +205,17 @@ class filter_check:
     # Only authenticate if we have a user/pass (we don't need one to send
     # via localhost).
     if self.settings['smtp_user'] and self.settings['smtp_pass']:
-      server.login(self.settings['smtp_user'], self.settings['smtp_pass'])
-    #server.set_debuglevel(1)
+      smtp.login(self.settings['smtp_user'], self.settings['smtp_pass'])
+    #smtp.set_debuglevel(1)
     try:
-      server.sendmail(self.settings['emailfrom'], self.settings['emailto'], mail)
+      smtp.sendmail(self.settings['emailfrom'], self.settings['emailto'], mail)
     except Exception as e:
       self.output("Message delivery was refused.")
       self.output(e)
       return self.ERROR
 
     self.output("Message sent")
-    server.quit()
+    smtp.quit()
 
     # Give the message some time to be delivered.
     self.output("Sleeping.")
