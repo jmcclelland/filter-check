@@ -9,7 +9,6 @@ import ConfigParser
 from email.parser import HeaderParser
 from os.path import expanduser
 import argparse
-import random
 from email.Utils import formatdate
 from email.utils import make_msgid
 
@@ -105,7 +104,7 @@ class filter_check:
   imap = None
 
   # The header value that will be used to find this message
-  x_filter_check = None
+  message_id = None
 
   def init(self, args = None):
     self.found = self.NOTFOUND
@@ -178,20 +177,15 @@ class filter_check:
       print("{0}".format(msg))
 
   def run(self):
-    # Generate a random string and add it to the messave via an invented
-    # header so we can find the message via IMAP below.
-    rand = random.getrandbits(128)
-    self.x_filter_check = "%32x" % rand
-
     # Build the message.
-    msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nDate: {3}\r\nMessage-id: {4}\r\nX-filter-check: {5}\r\n{6}"
+    self.message_id = make_msgid()
+    msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nDate: {3}\r\nMessage-id: {4}\r\n{5}"
     mail = msg.format(
       self.settings['subject'], 
       self.settings['emailfrom'], 
       self.settings['emailto'], 
       formatdate(),
-      make_msgid(),
-      self.x_filter_check,
+      self.message_id,
       self.settings['msg']
     )
 
@@ -306,10 +300,10 @@ class filter_check:
           parser = HeaderParser()
           headers = parser.parsestr(data[0][1])
           for key in headers.keys():
-            if key == "X-filter-check" and headers[key] == self.x_filter_check:
+            if key == "Message-id" and headers[key] == self.message_id:
               messages = num
       else:
-        typ, data = self.imap.search(None, '(HEADER X-filter-check "' + self.x_filter_check + '")')
+        typ, data = self.imap.search(None, '(HEADER Message-id "' + self.message_id + '")')
         messages = data[0]
 
     return messages
