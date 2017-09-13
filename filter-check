@@ -10,6 +10,8 @@ from email.parser import HeaderParser
 from os.path import expanduser
 import argparse
 import random
+from email.Utils import formatdate
+from email.utils import make_msgid
 
 def main():
   # Prepare the command line argument parser.
@@ -182,11 +184,13 @@ class filter_check:
     self.x_filter_check = "%32x" % rand
 
     # Build the message.
-    msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nX-filter-check: {3}\r\n{4}"
+    msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nDate: {3}\r\nMessage-id: {4}\r\nX-filter-check: {5}\r\n{6}"
     mail = msg.format(
       self.settings['subject'], 
       self.settings['emailfrom'], 
       self.settings['emailto'], 
+      formatdate(),
+      make_msgid(),
       self.x_filter_check,
       self.settings['msg']
     )
