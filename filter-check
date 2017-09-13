@@ -232,11 +232,11 @@ class filter_check:
       self.output(e)
       return self.ERROR
 
-    self.output("Message sent ({0})".format(mail_date)
+    self.output("Message sent ({0})".format(mail_date))
     smtp.quit()
 
     # Give the message some time to be delivered.
-    self.output("Sleeping for {0} seconds.".format(self.sleep))
+    self.output("Sleeping for {0} seconds.".format(self.settings['sleep']))
     time.sleep(self.settings['sleep'])
 
     # Login to check for it.
