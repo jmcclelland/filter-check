@@ -138,15 +138,32 @@ class filter_check:
       self.settings['imap_pass'] = self.config.get(self.settings['sendto'], "imap_pass")
       self.settings['imap_host'] = self.config.get(self.settings['sendto'], "imap_host")
       self.settings["imap_spam_box"] = self.config.get(self.settings['sendto'], "imap_spam_box")
-      self.settings['smtp_host'] = self.config.get(self.settings['sendvia'], "smtp_host")
 
     except ConfigParser.NoOptionError:
       # Throw a friendlier error.
       self.output("Error, missing a required value in your sendto or sendvia section.")
       return self.ERROR
-    except ConfigParser.NoSectionError:
+    except ConfigParser.NoSectionError as e:
       self.output("Please ensure both --sendto and --sendvia values are set as sections in your config file.")
       return self.ERROR
+
+    # The sentvia should be set to either a section OR to a host (e.g. localhost)
+    try:
+      self.settings['smtp_host'] = self.config.get(self.settings['sendvia'], "smtp_host")
+    except ConfigParser.NoSectionError:
+      # If there is no section, let's see if the sendvia value itself
+      # seems to be something we can deliver mail to.
+
+      if self.settings['sendvia'] == 'localhost':
+        self.settings['smtp_host'] = 'localhost'
+        pass
+
+      # Very simple testing...
+      ipv4_reg = re.compile('^([0-9]{1,3}\.){3}[0-9]+')
+      domain_reg = re.compile('^[a-zA-Z-]+')
+      if ipv4_reg.match(self.settings['sendvia']) or domain_reg.match(self.settings['sendvia']):
+        self.settings['smtp_host'] = self.settings['sendvia']
+        pass
 
     # Set more optional settings.
     self.set_optional_setting(self.settings['sendto'], "headers_regex")
@@ -170,6 +187,8 @@ class filter_check:
         self.settings[key] = self.config.get(section, key)
 
     except ConfigParser.NoOptionError:
+      pass
+    except ConfigParser.NoSectionError:
       pass
 
   def output(self, msg):
