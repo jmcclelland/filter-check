@@ -198,12 +198,13 @@ class filter_check:
   def run(self):
     # Build the message.
     self.message_id = make_msgid()
+    mail_date = formatdate()
     msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nDate: {3}\r\nMessage-id: {4}\r\n{5}"
     mail = msg.format(
       self.settings['subject'], 
       self.settings['emailfrom'], 
       self.settings['emailto'], 
-      formatdate(),
+      mail_date,
       self.message_id,
       self.settings['msg']
     )
@@ -231,11 +232,11 @@ class filter_check:
       self.output(e)
       return self.ERROR
 
-    self.output("Message sent")
+    self.output("Message sent ({0})".format(mail_date)
     smtp.quit()
 
     # Give the message some time to be delivered.
-    self.output("Sleeping.")
+    self.output("Sleeping for {0} seconds.".format(self.sleep))
     time.sleep(self.settings['sleep'])
 
     # Login to check for it.
