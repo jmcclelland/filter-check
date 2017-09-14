@@ -22,38 +22,51 @@ def main():
   parser.add_argument('--sendvia',
     default=None,
     help='the host to relay the email'
-  );
+  )
   parser.add_argument('--sendto',
     default=None,
     help='the host to send the email'
-  );
+  )
   parser.add_argument(
     '--quiet', 
     default=None,
     action="store_true",
     help='surpress all output, use exit codes only'
-  );
+  )
   parser.add_argument('--gtube',
     default=None, action="store_true",
     help='use spamassassin code to identify the message as spam (for debugging)'
-  );
+  )
   parser.add_argument('--headers',
     default=None, action="store_true",
     help='output full headers, instead of brief headers'
-  );
+  )
   parser.add_argument('--sleep',
     type=float,
     default=None, help='number of seconds to wait between sending and checking email'
-  );
+  )
   parser.add_argument('--emailfrom',
     default=None, help='send the test message from this email'
-  );
+  )
   parser.add_argument('--subject',
     default=None, help='specify the subject for the test message'
-  );
+  )
   parser.add_argument('--msg',
     default=None, help='specify the body of the test message'
-  );
+  )
+  parser.add_argument('--sendonly',
+    default=None,
+    action="store_true",
+    help="don't fetch the message, only send it and output the message-id sent"
+  )
+  parser.add_argument('--fetchfrom',
+    default=None,
+    help="don't send a message, only fetch a message from this host matching the passed messageid"
+  )
+  parser.add_argument('--messageid',
+    default=None,
+    help="when using fetchfrom, fetch the messageid specified in this option"
+  )
   args = parser.parse_args()
 
   check = filter_check()
@@ -66,8 +79,9 @@ def main():
   return check.run()
 
 class filter_check:
-  # Constants representing where a message is found.
-  INBOX = 0
+  # Constants representing return codes. SUCCESS means either the message
+  # was sent successfully or it was retrieved from the INBOX or both.
+  SUCCESS = 0
   SPAMBOX = 1
   NOTFOUND = 3
   ERROR = 255
@@ -97,14 +111,14 @@ class filter_check:
     'headers_regex': 'Subject',
     'smtp_user': None,
     'smtp_pass': None,
-    'smtp_host': None
+    'smtp_host': None,
+    'fetchfrom': None,
+    'sendonly': False,
+    'messageid': None
   }
 
   # The imap object
   imap = None
-
-  # The header value that will be used to find this message
-  message_id = None
 
   def init(self, args = None):
     self.found = self.NOTFOUND
@@ -124,28 +138,44 @@ class filter_check:
     self.set_optional_setting('main', 'sleep', vartype = 'float');
     self.set_optional_setting('main', 'sendto');
     self.set_optional_setting('main', 'sendvia');
+    self.set_optional_setting('main', 'sendonly');
+    self.set_optional_setting('main', 'fetchfrom');
+    self.set_optional_setting('main', 'messageid');
 
     # Now, overwrite with command line arguments.
     for key, value in vars(args).iteritems():
       if value is not None:
         self.settings[key] = value
 
-    # Now, set the smtp and imap variables. These are required so bail
+    # Now, set the emailto and imap variables, if necessary. These may be required so bail
     # if any of them are not set.
-    try:
-      self.settings['emailto'] = self.config.get(self.settings['sendto'], "emailto")
-      self.settings['imap_user'] = self.config.get(self.settings['sendto'], "imap_user")
-      self.settings['imap_pass'] = self.config.get(self.settings['sendto'], "imap_pass")
-      self.settings['imap_host'] = self.config.get(self.settings['sendto'], "imap_host")
-      self.settings["imap_spam_box"] = self.config.get(self.settings['sendto'], "imap_spam_box")
 
-    except ConfigParser.NoOptionError:
-      # Throw a friendlier error.
-      self.output("Error, missing a required value in your sendto or sendvia section.")
-      return self.ERROR
-    except ConfigParser.NoSectionError as e:
-      self.output("Please ensure both --sendto and --sendvia values are set as sections in your config file.")
-      return self.ERROR
+    if self.settings['sendonly'] == False:
+        # We need the imap settings since we will be fetching mail.
+        try:
+          self.settings['imap_user'] = self.config.get(self.settings['sendto'], "imap_user")
+          self.settings['imap_pass'] = self.config.get(self.settings['sendto'], "imap_pass")
+          self.settings['imap_host'] = self.config.get(self.settings['sendto'], "imap_host")
+          self.settings["imap_spam_box"] = self.config.get(self.settings['sendto'], "imap_spam_box")
+        except ConfigParser.NoOptionError:
+          # Throw a friendlier error.
+          self.output("Error, missing one of your imap_ settings in your sendto section.")
+          return self.ERROR
+        except ConfigParser.NoSectionError as e:
+          self.output("Please ensure the your --sendto value is set as a section in your config file.")
+          return self.ERROR
+
+    if self.settings['fetchfrom'] == None:
+        # We need the emailto setting since we will be sending mail.
+        try:
+          self.settings['emailto'] = self.config.get(self.settings['sendto'], "emailto")
+        except ConfigParser.NoOptionError:
+          # Throw a friendlier error.
+          self.output("Error, missing emailto setting in your sendto section.")
+          return self.ERROR
+        except ConfigParser.NoSectionError as e:
+          self.output("Please ensure the your --sendto value is set as a section in your config file.")
+          return self.ERROR
 
     # The sentvia should be set to either a section OR to a host (e.g. localhost)
     try:
@@ -175,6 +205,15 @@ class filter_check:
     if self.settings['gtube'] == True:
       self.msg = "XJS*C4JDBQADN1.NSBN3*2IDNEN*GTUBE-STANDARD-ANTI-UBE-TEST-EMAIL*C.34X"
 
+    # Now do some sanity checking. It's possible to have conflicting settings.
+    if self.settings['fetchfrom'] and not self.settings['messageid']:
+      self.output("Can't fetchfrom without a message id.")
+      return self.ERROR
+
+    if self.settings['fetchfrom'] is not None and self.settings['sendonly'] == True:
+      self.output("--fetchfrom and --sendonly contradict each other. Please set only one of them.")
+      return self.ERROR
+
     return True
 
   def set_optional_setting(self, section, key, vartype = 'string'):
@@ -196,48 +235,60 @@ class filter_check:
       print("{0}".format(msg))
 
   def run(self):
-    # Build the message.
-    self.message_id = make_msgid()
-    mail_date = formatdate()
-    msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nDate: {3}\r\nMessage-id: {4}\r\n{5}"
-    mail = msg.format(
-      self.settings['subject'], 
-      self.settings['emailfrom'], 
-      self.settings['emailto'], 
-      mail_date,
-      self.message_id,
-      self.settings['msg']
-    )
+    if self.settings['fetchfrom'] == None:
+      # Build the message.
+      self.settings['messageid'] = make_msgid()
+      mail_date = formatdate()
+      msg = "Subject: {0}\r\nFrom: {1}\r\nTo: {2}\r\nDate: {3}\r\nMessage-id: {4}\r\n{5}"
+      mail = msg.format(
+        self.settings['subject'], 
+        self.settings['emailfrom'], 
+        self.settings['emailto'], 
+        mail_date,
+        self.settings['messageid'],
+        self.settings['msg']
+      )
 
-    # Send it.
-    try:
+      # Send it.
+      try:
+        if self.settings['smtp_user'] and self.settings['smtp_pass']:
+          smtp = smtplib.SMTP_SSL(self.settings['smtp_host'])
+        else:
+          smtp = smtplib.SMTP(self.settings['smtp_host'])
+      except Exception as e:
+        self.output("Could not connect to the smtp host.")
+        self.output(e)
+        return self.ERROR
+
+      # Only authenticate if we have a user/pass (we don't need one to send
+      # via localhost).
       if self.settings['smtp_user'] and self.settings['smtp_pass']:
-        smtp = smtplib.SMTP_SSL(self.settings['smtp_host'])
-      else:
-        smtp = smtplib.SMTP(self.settings['smtp_host'])
-    except Exception as e:
-      self.output("Could not connect to the smtp host.")
-      self.output(e)
-      return self.ERROR
+        smtp.login(self.settings['smtp_user'], self.settings['smtp_pass'])
+      #smtp.set_debuglevel(1)
+      try:
+        smtp.sendmail(self.settings['emailfrom'], self.settings['emailto'], mail)
+      except Exception as e:
+        self.output("Message delivery was refused.")
+        self.output(e)
+        return self.ERROR
 
-    # Only authenticate if we have a user/pass (we don't need one to send
-    # via localhost).
-    if self.settings['smtp_user'] and self.settings['smtp_pass']:
-      smtp.login(self.settings['smtp_user'], self.settings['smtp_pass'])
-    #smtp.set_debuglevel(1)
-    try:
-      smtp.sendmail(self.settings['emailfrom'], self.settings['emailto'], mail)
-    except Exception as e:
-      self.output("Message delivery was refused.")
-      self.output(e)
-      return self.ERROR
+      smtp.quit()
+      self.output("Message sent ({0})".format(mail_date))
+      self.output("Message-id: {0}".format(self.settings['messageid']))
+      if self.settings['quiet'] == True:
+        # In quiet mode, just output the message-id by itself via standard
+        # out so it can easily be captured in batch mode.
+        print(self.settings['messageid'])
+      
+    if self.settings['sendonly'] == True:
+      # We are done.
+      return self.SUCCESS
 
-    self.output("Message sent ({0})".format(mail_date))
-    smtp.quit()
-
-    # Give the message some time to be delivered.
-    self.output("Sleeping for {0} seconds.".format(self.settings['sleep']))
-    time.sleep(self.settings['sleep'])
+    # Try to retrieve the message.
+    if self.settings['fetchfrom'] is None:
+      # Give the message some time to be delivered.
+      self.output("Sleeping for {0} seconds.".format(self.settings['sleep']))
+      time.sleep(self.settings['sleep'])
 
     # Login to check for it.
     self.imap = imaplib.IMAP4_SSL(self.settings['imap_host'])
@@ -284,7 +335,7 @@ class filter_check:
     messages = self.search_mailbox() 
 
     if len(messages) > 0:
-      self.found = self.INBOX
+      self.found = self.SUCCESS
     else:
       # Try spam box.
       messages = self.search_mailbox(self.settings['imap_spam_box']) 
@@ -294,7 +345,7 @@ class filter_check:
     if self.found == self.NOTFOUND:
       self.output("Found in: NOT FOUND")
     else:
-      if self.found == self.INBOX:
+      if self.found == self.SUCCESS:
         friendly_location = 'Inbox'
       else:
         friendly_location = 'Spambox'
@@ -320,10 +371,10 @@ class filter_check:
           parser = HeaderParser()
           headers = parser.parsestr(data[0][1])
           for key in headers.keys():
-            if key == "Message-id" and headers[key] == self.message_id:
+            if key == "Message-id" and headers[key] == self.settings['messageid']:
               messages = num
       else:
-        typ, data = self.imap.search(None, '(HEADER Message-id "' + self.message_id + '")')
+        typ, data = self.imap.search(None, '(HEADER Message-id "' + self.settings['messageid'] + '")')
         messages = data[0]
 
     return messages
