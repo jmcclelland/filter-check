@@ -14,41 +14,41 @@ All settings in the [main] section of the configuration file can be overridden o
 
 ## Usage
 
-		usage: filter-check [-h] [--sendvia SENDVIA] [--sendto SENDTO] [--quiet]
-												[--gtube] [--headers] [--sleep SLEEP]
-												[--emailfrom EMAILFROM] [--subject SUBJECT] [--msg MSG]
-												[--sendonly] [--fetchfrom FETCHFROM]
-												[--messageid MESSAGEID]
+    usage: filter-check [-h] [--sendvia SENDVIA] [--sendto SENDTO] [--quiet]
+                        [--gtube] [--headers] [--sleep SLEEP]
+                        [--emailfrom EMAILFROM] [--subject SUBJECT] [--msg MSG]
+                        [--sendonly] [--fetchfrom FETCHFROM]
+                        [--messageid MESSAGEID]
 
-		Check deliverability to various mail providers. Configuration file is in
-		~/.filter-check.conf
+    Check deliverability to various mail providers. Configuration file is in
+    ~/.filter-check.conf
 
-		optional arguments:
-			-h, --help            show this help message and exit
-			--sendvia SENDVIA     the host to relay the email
-			--sendto SENDTO       the host to send the email
-			--quiet               surpress all output, use exit codes only
-			--gtube               use spamassassin code to identify the message as spam
-														(for debugging)
-			--headers             output full headers, instead of brief headers
-			--sleep SLEEP         number of seconds to wait between sending and checking
-														email
-			--emailfrom EMAILFROM
-														send the test message from this email
-			--subject SUBJECT     specify the subject for the test message
-			--msg MSG             specify the body of the test message
-			--sendonly            don't fetch the message, only send it and output the
-														message-id sent
-			--fetchfrom FETCHFROM
-														don't send a message, only fetch a message from this
-														host matching the passed messageid
-			--messageid MESSAGEID
-														when using fetchfrom, fetch the messageid specified in
-														this option
+    optional arguments:
+      -h, --help            show this help message and exit
+      --sendvia SENDVIA     the host to relay the email
+      --sendto SENDTO       the host to send the email
+      --quiet               surpress all output, use exit codes only
+      --gtube               use spamassassin code to identify the message as spam
+                            (for debugging)
+      --headers             output full headers, instead of brief headers
+      --sleep SLEEP         number of seconds to wait between sending and checking
+                            email
+      --emailfrom EMAILFROM
+                            send the test message from this email
+      --subject SUBJECT     specify the subject for the test message
+      --msg MSG             specify the body of the test message
+      --sendonly            don't fetch the message, only send it and output the
+                            message-id sent
+      --fetchfrom FETCHFROM
+                            don't send a message, only fetch a message from this
+                            host matching the passed messageid
+      --messageid MESSAGEID
+                            when using fetchfrom, fetch the messageid specified in
+                            this option
 
-		Exit codes: 0 if message is found in Inbox, 1 if found in spam box, 2 if not
-		delivered, 255 if error.
-		 
+    Exit codes: 0 if message is found in Inbox, 1 if found in spam box, 2 if not
+    delivered, 255 if error.
+     
 ## Examples
 
 With a minimally set configuration file, you can send and check the message you sent via a single invocation:
