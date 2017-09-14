@@ -150,32 +150,39 @@ class filter_check:
     # Now, set the emailto and imap variables, if necessary. These may be required so bail
     # if any of them are not set.
 
+    # The section to pull in IMAP information could be defined via --sendto
+    # or via --fetchfrom.
+    # By default, use sendto.
+    fetch_section = self.settings['sendto']
+    if self.settings['fetchfrom'] is not None:
+      fetch_section = self.settings['fetchfrom']
+
     if self.settings['sendonly'] == False:
-        # We need the imap settings since we will be fetching mail.
-        try:
-          self.settings['imap_user'] = self.config.get(self.settings['sendto'], "imap_user")
-          self.settings['imap_pass'] = self.config.get(self.settings['sendto'], "imap_pass")
-          self.settings['imap_host'] = self.config.get(self.settings['sendto'], "imap_host")
-          self.settings["imap_spam_box"] = self.config.get(self.settings['sendto'], "imap_spam_box")
-        except ConfigParser.NoOptionError:
-          # Throw a friendlier error.
-          self.output("Error, missing one of your imap_ settings in your sendto section.")
-          return self.ERROR
-        except ConfigParser.NoSectionError as e:
-          self.output("Please ensure the your --sendto value is set as a section in your config file.")
-          return self.ERROR
+      # We need the imap settings since we will be fetching mail.
+      try:
+        self.settings['imap_user'] = self.config.get(fetch_section, "imap_user")
+        self.settings['imap_pass'] = self.config.get(fetch_section, "imap_pass")
+        self.settings['imap_host'] = self.config.get(fetch_section, "imap_host")
+        self.settings["imap_spam_box"] = self.config.get(fetch_section, "imap_spam_box")
+      except ConfigParser.NoOptionError:
+        # Throw a friendlier error.
+        self.output("Error, missing one of your imap_ settings in your sendto or fetchfrom section.")
+        return self.ERROR
+      except ConfigParser.NoSectionError as e:
+        self.output("Please ensure the your --sendto or --fetchfrom value is set as a section in your config file.")
+        return self.ERROR
 
     if self.settings['fetchfrom'] == None:
-        # We need the emailto setting since we will be sending mail.
-        try:
-          self.settings['emailto'] = self.config.get(self.settings['sendto'], "emailto")
-        except ConfigParser.NoOptionError:
-          # Throw a friendlier error.
-          self.output("Error, missing emailto setting in your sendto section.")
-          return self.ERROR
-        except ConfigParser.NoSectionError as e:
-          self.output("Please ensure the your --sendto value is set as a section in your config file.")
-          return self.ERROR
+      # We need the emailto setting since we will be sending mail.
+      try:
+        self.settings['emailto'] = self.config.get(fetch_section, "emailto")
+      except ConfigParser.NoOptionError:
+        # Throw a friendlier error.
+        self.output("Error, missing emailto setting in your sendto section.")
+        return self.ERROR
+      except ConfigParser.NoSectionError as e:
+        self.output("Please ensure the your --sendto value is set as a section in your config file.")
+        return self.ERROR
 
     # The sentvia should be set to either a section OR to a host (e.g. localhost)
     try:
@@ -294,7 +301,7 @@ class filter_check:
     self.imap = imaplib.IMAP4_SSL(self.settings['imap_host'])
     try:
       self.imap.login(self.settings['imap_user'], self.settings['imap_pass'])
-    except Exception as e:
+    except Exception:
       self.output("Failed to login to IMAP server. Wrong user/pass?")
       return self.ERROR
 
