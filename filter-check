@@ -17,7 +17,7 @@ def main():
   parser = argparse.ArgumentParser(
     prog = "filter-check", 
     description='Check deliverability to various mail providers. Configuration file is in ~/.filter-check.conf',
-    epilog="Exit codes: 0 if message is found in Inbox, 1 if found in spam box, 3 if not delivered, 255 if error."
+    epilog="Exit codes: 0 if message is found in Inbox, 1 if found in spam box, 2 if not delivered, 255 if error."
   )
   parser.add_argument('--sendvia',
     default=None,
@@ -83,7 +83,7 @@ class filter_check:
   # was sent successfully or it was retrieved from the INBOX or both.
   SUCCESS = 0
   SPAMBOX = 1
-  NOTFOUND = 3
+  NOTFOUND = 2
   ERROR = 255
 
   # Variable holding where the message was found. 
