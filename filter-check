@@ -203,7 +203,7 @@ class filter_check:
         pass
 
     # Set more optional settings.
-    self.set_optional_setting(self.settings['sendto'], "headers_regex")
+    self.set_optional_setting(fetch_section, "headers_regex")
     self.set_optional_setting(self.settings['sendvia'], "smtp_user")
     self.set_optional_setting(self.settings['sendvia'], "smtp_pass")
 
