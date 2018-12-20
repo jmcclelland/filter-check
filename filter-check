@@ -361,12 +361,27 @@ class filter_check:
 
     return messages
 
+  def get_count(self, mailbox, attempt = 0):
+    try:
+      if mailbox == 'Inbox':
+        return self.imap.select()
+      else:
+        return self.imap.select(mailbox)
+    except imaplib.IMAP4.abort:
+      # These seems to happen periodically. Not sure why. The error message
+      # usually says "imaplib.abort: command: SELECT => IMAP4rev1 Server logging out"
+      # Shrug. If it does happen, sleep for 5 seconds and try again.
+      if attempt == 5:
+        # Give up and report that we got 0 messages.
+        self.output("Failed to properly count message. Giving up. This is an error, not an indication of filtering.")
+        return 0
+      self.output("Failed to properly count message. Sleeping for 5 seconds and trying again.")
+      time.sleep(5)
+      self.get_count(mailbox, attempt + 1)
+
   def search_mailbox(self, mailbox = 'Inbox'):
     messages = "" 
-    if mailbox == 'Inbox':
-      count = self.imap.select()
-    else:
-      count = self.imap.select(mailbox)
+    count = self.get_count(mailbox)
 
     if count > 0:
       if self.settings["imap_host"] == "imap.mail.yahoo.com":
