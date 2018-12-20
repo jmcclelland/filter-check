@@ -1,15 +1,15 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import smtplib
 import sys
 import imaplib
 import time
 import re
-import ConfigParser
+import configparser
 from email.parser import HeaderParser
 from os.path import expanduser
 import argparse
-from email.Utils import formatdate
+from email.utils import formatdate
 from email.utils import make_msgid
 
 def main():
@@ -124,7 +124,7 @@ class filter_check:
     self.found = self.NOTFOUND
 
     # First parse the configuration file.
-    self.config = ConfigParser.SafeConfigParser()
+    self.config = configparser.SafeConfigParser()
     home = expanduser("~")
     self.config.readfp(open(home + '/.filter-check.conf'))
 
@@ -143,7 +143,7 @@ class filter_check:
     self.set_optional_setting('main', 'messageid');
 
     # Now, overwrite with command line arguments.
-    for key, value in vars(args).iteritems():
+    for key, value in vars(args).items():
       if value is not None:
         self.settings[key] = value
 
@@ -164,11 +164,11 @@ class filter_check:
         self.settings['imap_pass'] = self.config.get(fetch_section, "imap_pass")
         self.settings['imap_host'] = self.config.get(fetch_section, "imap_host")
         self.settings["imap_spam_box"] = self.config.get(fetch_section, "imap_spam_box")
-      except ConfigParser.NoOptionError:
+      except configparser.NoOptionError:
         # Throw a friendlier error.
         self.output("Error, missing one of your imap_ settings in your sendto or fetchfrom section.")
         return self.ERROR
-      except ConfigParser.NoSectionError as e:
+      except configparser.NoSectionError as e:
         self.output("Please ensure the your --sendto or --fetchfrom value is set as a section in your config file.")
         return self.ERROR
 
@@ -176,18 +176,18 @@ class filter_check:
       # We need the emailto setting since we will be sending mail.
       try:
         self.settings['emailto'] = self.config.get(fetch_section, "emailto")
-      except ConfigParser.NoOptionError:
+      except configparser.NoOptionError:
         # Throw a friendlier error.
         self.output("Error, missing emailto setting in your sendto section.")
         return self.ERROR
-      except ConfigParser.NoSectionError as e:
+      except configparser.NoSectionError as e:
         self.output("Please ensure the your --sendto value is set as a section in your config file.")
         return self.ERROR
 
     # The sentvia should be set to either a section OR to a host (e.g. localhost)
     try:
       self.settings['smtp_host'] = self.config.get(self.settings['sendvia'], "smtp_host")
-    except ConfigParser.NoSectionError:
+    except configparser.NoSectionError:
       # If there is no section, let's see if the sendvia value itself
       # seems to be something we can deliver mail to.
 
@@ -232,9 +232,9 @@ class filter_check:
       else:
         self.settings[key] = self.config.get(section, key)
 
-    except ConfigParser.NoOptionError:
+    except configparser.NoOptionError:
       pass
-    except ConfigParser.NoSectionError:
+    except configparser.NoSectionError:
       pass
 
   def output(self, msg):
@@ -322,7 +322,7 @@ class filter_check:
         self.output(messages)
         return self.ERROR
       parser = HeaderParser()
-      headers = parser.parsestr(data[0][1])
+      headers = parser.parsestr(str(data[0][1]))
       for key in headers.keys():
         if self.settings['headers'] == True or reg.match(key):
           self.output("{0}: {1}".format(key, headers.get(key)))
@@ -374,15 +374,19 @@ class filter_check:
       if attempt == 5:
         # Give up and report that we got 0 messages.
         self.output("Failed to properly count message. Giving up. This is an error, not an indication of filtering.")
-        return 0
+        return False 
       self.output("Failed to properly count message. Sleeping for 5 seconds and trying again.")
       time.sleep(5)
-      self.get_count(mailbox, attempt + 1)
+      return self.get_count(mailbox, attempt + 1)
 
   def search_mailbox(self, mailbox = 'Inbox'):
     messages = "" 
-    count = self.get_count(mailbox)
-
+    response = self.get_count(mailbox)
+    if not response:
+      count = 0
+    else:
+      # Translate reponse to an integer. 
+      count = int(response[1][0])
     if count > 0:
       if self.settings["imap_host"] == "imap.mail.yahoo.com":
         # Yahoo IMAP doesn't support searching. bleh. We have to fetch each
@@ -391,7 +395,7 @@ class filter_check:
         for num in data[0].split():
           typ, data = self.imap.fetch(num, '(RFC822)')
           parser = HeaderParser()
-          headers = parser.parsestr(data[0][1])
+          headers = parser.parsestr(str(data[0][1]))
           for key in headers.keys():
             if key == "Message-id" and headers[key] == self.settings['messageid']:
               messages = num
