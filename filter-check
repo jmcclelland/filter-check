@@ -240,6 +240,7 @@ class filter_check:
   def output(self, msg):
     if not self.settings['quiet']:
       print("{0}".format(msg))
+      sys.stdout.flush()
 
   def run(self):
     if self.settings['fetchfrom'] == None:
@@ -309,10 +310,14 @@ class filter_check:
     #print self.imap.namespace()
     #print self.imap.list()
  
-    messages = self.retrieve_messages()
+    try:
+      messages = self.retrieve_messages()
+    except selectMailboxFailure:
+      # Failed to properly select mailbox. Expunging will fail.
+      return self.ERROR
 
     reg = re.compile(self.settings['headers_regex'])
-    # Iterate over each message found (should only be one)
+    # Iterate over each message found (should only be one) and delete it.
     for num in messages.split():
       try:
         typ, data = self.imap.fetch(num, '(RFC822)')
@@ -373,8 +378,7 @@ class filter_check:
       # Shrug. If it does happen, sleep for 5 seconds and try again.
       if attempt == 5:
         # Give up and report that we got 0 messages.
-        self.output("Failed to properly count message. Giving up. This is an error, not an indication of filtering.")
-        return False 
+        raise selectMailboxFailure("Failed to properly count message. Giving up. This is an error, not an indication of filtering.")
       self.output("Failed to properly count message. Sleeping for 5 seconds and trying again.")
       time.sleep(5)
       return self.get_count(mailbox, attempt + 1)
@@ -382,11 +386,8 @@ class filter_check:
   def search_mailbox(self, mailbox = 'Inbox'):
     messages = "" 
     response = self.get_count(mailbox)
-    if not response:
-      count = 0
-    else:
-      # Translate reponse to an integer. 
-      count = int(response[1][0])
+    # Translate reponse to an integer. 
+    count = int(response[1][0])
     if count > 0:
       if self.settings["imap_host"] == "imap.mail.yahoo.com":
         # Yahoo IMAP doesn't support searching. bleh. We have to fetch each
@@ -404,6 +405,10 @@ class filter_check:
         messages = data[0]
 
     return messages
+
+# Define a custom exception so we know when we failed to select a mailbox.
+class selectMailboxFailure(Exception):
+  pass
 
 if __name__ == "__main__":
   sys.exit(main())
