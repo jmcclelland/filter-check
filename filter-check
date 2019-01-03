@@ -373,9 +373,10 @@ class filter_check:
       else:
         return self.imap.select(mailbox)
     except imaplib.IMAP4.abort:
-      # These seems to happen periodically. Not sure why. The error message
-      # usually says "imaplib.abort: command: SELECT => IMAP4rev1 Server logging out"
-      # Shrug. If it does happen, sleep for 5 seconds and try again.
+      # These seems to happen periodically, perhaps when there are a lot of
+      # messages in the inbox. The error message usually says "imaplib.abort:
+      # command: SELECT => IMAP4rev1 Server logging out" Shrug. If it does
+      # happen, sleep for 5 seconds and try again.
       if attempt == 5:
         # Give up and report that we got 0 messages.
         raise selectMailboxFailure("Failed to properly count message. Giving up. This is an error, not an indication of filtering.")
@@ -389,21 +390,8 @@ class filter_check:
     # Translate reponse to an integer. 
     count = int(response[1][0])
     if count > 0:
-      if self.settings["imap_host"] == "imap.mail.yahoo.com":
-        # Yahoo IMAP doesn't support searching. bleh. We have to fetch each
-        # message and look for our special header.
-        typ, data = self.imap.search(None, 'ALL')
-        for num in data[0].split():
-          typ, data = self.imap.fetch(num, '(RFC822)')
-          parser = HeaderParser()
-          headers = parser.parsestr(str(data[0][1]))
-          for key in headers.keys():
-            if key == "Message-id" and headers[key] == self.settings['messageid']:
-              messages = num
-      else:
-        typ, data = self.imap.search(None, '(HEADER Message-id "' + self.settings['messageid'] + '")')
-        messages = data[0]
-
+      typ, data = self.imap.search(None, '(HEADER Message-id "' + self.settings['messageid'] + '")')
+      messages = data[0]
     return messages
 
 # Define a custom exception so we know when we failed to select a mailbox.
