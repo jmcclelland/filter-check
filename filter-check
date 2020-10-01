@@ -124,7 +124,7 @@ class filter_check:
     self.found = self.NOTFOUND
 
     # First parse the configuration file.
-    self.config = configparser.SafeConfigParser()
+    self.config = configparser.ConfigParser()
     home = expanduser("~")
     self.config.readfp(open(home + '/.filter-check.conf'))
 
