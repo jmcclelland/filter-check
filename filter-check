@@ -126,7 +126,7 @@ class filter_check:
     # First parse the configuration file.
     self.config = configparser.ConfigParser()
     home = expanduser("~")
-    self.config.readfp(open(home + '/.filter-check.conf'))
+    self.config.read_file(open(home + '/.filter-check.conf'))
 
     # These settings may or may not be present in the configuration file.
     # If absent, we use the defaults. Either way, they can be overwritten
