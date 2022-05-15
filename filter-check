@@ -184,16 +184,16 @@ class filter_check:
         self.output("Please ensure the your --sendto value is set as a section in your config file.")
         return self.ERROR
 
-    # The sentvia should be set to either a section OR to a host (e.g. localhost)
-    try:
-      self.settings['smtp_host'] = self.config.get(self.settings['sendvia'], "smtp_host")
-    except configparser.NoSectionError:
-      # If there is no section, let's see if the sendvia value itself
-      # seems to be something we can deliver mail to.
+      # The sendvia should be set to either a section OR to a host (e.g. localhost)
+      try:
+        self.settings['smtp_host'] = self.config.get(self.settings['sendvia'], "smtp_host")
+      except configparser.NoSectionError:
+        # If there is no section, let's see if the sendvia value itself
+        # seems to be something we can deliver mail to.
 
-      if self.settings['sendvia'] == 'localhost':
-        self.settings['smtp_host'] = 'localhost'
-        pass
+        if self.settings['sendvia'] == 'localhost':
+          self.settings['smtp_host'] = 'localhost'
+          pass
 
       # Very simple testing...
       ipv4_reg = re.compile('^([0-9]{1,3}\.){3}[0-9]+')
